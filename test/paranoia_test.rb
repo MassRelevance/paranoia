@@ -729,6 +729,29 @@ class ParanoiaTest < test_framework
     refute ParanoidModelWithBelong.unscoped.exists?(model.id)
   end
 
+  def test_restore_with_associations_with_recovery_window
+    parent = ParentModel.create
+    first_child = parent.very_related_models.create
+    second_child = parent.very_related_models.create
+
+    first_child.deleted_at = 1.year.ago
+    first_child.save
+
+    assert_equal true, parent.deleted_at.nil?
+    assert_equal false, first_child.deleted_at.nil?
+    assert_equal true, second_child.deleted_at.nil?
+
+    parent.destroy
+    assert_equal false, parent.deleted_at.nil?
+    assert_equal false, first_child.reload.deleted_at.nil?
+    assert_equal false, second_child.reload.deleted_at.nil?
+
+    parent.restore!(:recursive => true, :dependent_recovery_window => 1.minute)
+    assert_equal true, parent.deleted_at.nil?
+    assert_equal false, first_child.reload.deleted_at.nil?
+    assert_equal true, second_child.reload.deleted_at.nil?
+  end
+
   def test_observers_notified
     a = ParanoidModelWithObservers.create
     a.destroy

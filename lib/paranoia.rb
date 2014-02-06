@@ -112,7 +112,22 @@ module Paranoia
           update_columns(paranoia_restore_attributes)
           touch
         end
-        restore_associated_records if opts[:recursive]
+
+        if opts[:recursive]
+          deleted_at = send(paranoia_column)
+          recovery_window_range =
+            if opts[:dependent_recovery_window]
+              # opts[:dependent_recovery_window] expected to be a timespan in seconds
+              # e.g. 2.minutes
+              #
+              # now create the range
+              (deleted_at-opts[:dependent_recovery_window]..deleted_at+opts[:dependent_recovery_window])
+            else
+              opts[:recovery_window_range]
+            end
+
+          restore_associated_records(recovery_window_range)
+        end
       end
     end
 
@@ -165,7 +180,7 @@ module Paranoia
 
   # restore associated records that have been soft deleted when
   # we called #destroy
-  def restore_associated_records
+  def restore_associated_records(recovery_window_range = nil)
     destroyed_associations = self.class.reflect_on_all_associations.select do |association|
       association.options[:dependent] == :destroy
     end
@@ -196,7 +211,11 @@ module Paranoia
 
         association_class = association_class_name.constantize
         if association_class.paranoid?
-          association_class.only_deleted.where(association_find_conditions).first.try!(:restore, recursive: true)
+          association_class.only_deleted.where(association_find_conditions).select do |record|
+            recovery_window_range.nil? || recovery_window_range.cover?(record.send(record.paranoia_column))
+          end.each do |record|
+            record.restore(:recursive => true, :recovery_window_range => recovery_window_range)
+          end
         end
       end
     end
