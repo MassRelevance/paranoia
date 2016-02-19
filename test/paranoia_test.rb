@@ -736,6 +736,7 @@ class ParanoiaTest < test_framework
 
     first_child.deleted_at = 1.year.ago
     first_child.save
+    first_child.reload
 
     assert_equal true, parent.deleted_at.nil?
     assert_equal false, first_child.deleted_at.nil?
